@@ -159,7 +159,17 @@ class NanoBanana {
       num_images: num_images,
       ...rest
     };
-    if (imageUrl) payload.image_urls = [await this._upload(imageUrl)];
+    if (imageUrl) {
+      const imageUrls = Array.isArray(imageUrl) ? imageUrl : [imageUrl];
+      const uploadedUrls = [];
+      console.log(`Mengunggah ${imageUrls.length} gambar secara berurutan...`);
+      for (const url of imageUrls) {
+        const uploadedUrl = await this._upload(url);
+        uploadedUrls.push(uploadedUrl);
+      }
+      payload.image_urls = uploadedUrls;
+      console.log("Semua gambar berhasil diunggah.");
+    }
     const taskId = await this._submit(payload);
     return await this._polling(taskId);
   }

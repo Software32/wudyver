@@ -244,12 +244,19 @@ class NanoBananaAI {
   }) {
     this.log(`Memulai tugas img2img dengan prompt: "${prompt}"`);
     try {
-      const base64DataUri = await this._handleImageUrl(imageUrl);
-      const uploadedImageUrl = await this.uploadImage(base64DataUri);
+      const imageUrls = Array.isArray(imageUrl) ? imageUrl : [imageUrl];
+      this.log(`Memproses ${imageUrls.length} gambar input secara berurutan...`);
+      const uploadedImageUrls = [];
+      for (const url of imageUrls) {
+        const base64DataUri = await this._handleImageUrl(url);
+        const uploadedUrl = await this.uploadImage(base64DataUri);
+        uploadedImageUrls.push(uploadedUrl);
+      }
+      this.log("Semua gambar berhasil diunggah.");
       return await this.generate({
         prompt: prompt,
-        inputImages: [uploadedImageUrl],
-        numImages: "1",
+        inputImages: uploadedImageUrls,
+        numImages: uploadedImageUrls.length.toString(),
         mode: "image-edit",
         ...rest
       });

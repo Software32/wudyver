@@ -78,18 +78,23 @@ class AinanobananaAPI {
   }) {
     console.log("Starting img2img process...");
     try {
-      const imageResponse = await axios.get(imageUrl, {
-        responseType: "arraybuffer"
-      });
-      const imageBuffer = Buffer.from(imageResponse.data, "binary");
       const form = new FormData();
       form.append("prompt", prompt);
       form.append("addWatermark", rest.addWatermark ?? "true");
       form.append("inputMode", "upload");
-      form.append("images", imageBuffer, {
-        filename: "image.png",
-        contentType: "image/png"
-      });
+      const imageUrls = Array.isArray(imageUrl) ? imageUrl : [imageUrl];
+      for (let i = 0; i < imageUrls.length; i++) {
+        const url = imageUrls[i];
+        console.log(`Fetching image from ${url}...`);
+        const imageResponse = await axios.get(url, {
+          responseType: "arraybuffer"
+        });
+        const imageBuffer = Buffer.from(imageResponse.data, "binary");
+        form.append("images", imageBuffer, {
+          filename: `image${i}.png`,
+          contentType: "image/png"
+        });
+      }
       console.log("Sending generation request for img2img...");
       const response = await this.api.post("image/generate", form, {
         headers: form.getHeaders()

@@ -56,26 +56,36 @@ class AIBanana {
         form.append("numImages", numImages.toString());
         form.append("aspectRatio", aspectRatio);
         form.append("multipleImages", "true");
-        form.append("imageCount", "1");
-        let imageData, filename = "image.jpg";
-        if (imageUrl.startsWith("http")) {
-          const response = await axios.get(imageUrl, {
-            responseType: "arraybuffer"
+        const imageUrls = Array.isArray(imageUrl) ? imageUrl : [imageUrl];
+        form.append("imageCount", imageUrls.length.toString());
+        for (let i = 0; i < imageUrls.length; i++) {
+          const currentImage = imageUrls[i];
+          let imageData;
+          let filename = `image_${i}.jpg`;
+          if (typeof currentImage === "string" && currentImage.startsWith("http")) {
+            console.log(`Mengambil gambar dari URL: ${currentImage}`);
+            const response = await axios.get(currentImage, {
+              responseType: "arraybuffer"
+            });
+            imageData = Buffer.from(response.data);
+            try {
+              const url = new URL(currentImage);
+              const pathname = url.pathname;
+              filename = pathname.substring(pathname.lastIndexOf("/") + 1) || filename;
+            } catch (e) {}
+          } else if (Buffer.isBuffer(currentImage)) {
+            imageData = currentImage;
+          } else if (typeof currentImage === "string") {
+            imageData = Buffer.from(currentImage.replace(/^data:image\/\w+;base64,/, ""), "base64");
+          } else {
+            console.warn(`Format imageUrl pada index ${i} tidak didukung dan akan dilewati.`);
+            continue;
+          }
+          form.append(`image_${i}`, imageData, {
+            filename: filename
           });
-          imageData = Buffer.from(response.data);
-          try {
-            const url = new URL(imageUrl);
-            const pathname = url.pathname;
-            filename = pathname.substring(pathname.lastIndexOf("/") + 1) || filename;
-          } catch (e) {}
-        } else if (Buffer.isBuffer(imageUrl)) {
-          imageData = imageUrl;
-        } else {
-          imageData = Buffer.from(imageUrl.replace(/^data:image\/\w+;base64,/, ""), "base64");
+          console.log(`Berhasil menambahkan image_${i} ke form.`);
         }
-        form.append("image_0", imageData, {
-          filename: filename
-        });
         const response = await this.client.post("/api/image-generation", form, {
           headers: {
             ...this.baseHeaders,

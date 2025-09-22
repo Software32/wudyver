@@ -132,40 +132,49 @@ class NanoBananaAI {
     console.log(`[NanoBananaAI] Memulai proses Image-to-Image dengan prompt: "${prompt}"`);
     try {
       await this._ensureAuth();
-      const imageData = await this._getImageData(imageUrl);
-      console.log("[NanoBananaAI] Step 1/3: Meminta URL untuk upload...");
-      const urlResponse = await this.api.post("/api/get-upload-url", {
-        fileName: imageData.filename,
-        contentType: imageData.contentType,
-        fileSize: imageData.fileSize
-      }, {
-        headers: {
-          "content-type": "application/json"
+      const imageUrls = Array.isArray(imageUrl) ? imageUrl : [imageUrl];
+      const publicUrls = [];
+      console.log(`[NanoBananaAI] Ditemukan ${imageUrls.length} gambar untuk diproses.`);
+      for (let i = 0; i < imageUrls.length; i++) {
+        const url = imageUrls[i];
+        const imageIndex = i + 1;
+        console.log(`\n[NanoBananaAI] Memproses gambar ${imageIndex}/${imageUrls.length}...`);
+        const imageData = await this._getImageData(url);
+        console.log(`[NanoBananaAI] Step 1/3 (Gambar ${imageIndex}): Meminta URL untuk upload...`);
+        const urlResponse = await this.api.post("/api/get-upload-url", {
+          fileName: imageData.filename,
+          contentType: imageData.contentType,
+          fileSize: imageData.fileSize
+        }, {
+          headers: {
+            "content-type": "application/json"
+          }
+        });
+        const {
+          uploadUrl,
+          publicUrl
+        } = urlResponse.data;
+        if (!uploadUrl || !publicUrl) {
+          throw new Error(`Gagal mendapatkan URL upload untuk gambar ${imageIndex}.`);
         }
-      });
-      const {
-        uploadUrl,
-        publicUrl
-      } = urlResponse.data;
-      if (!uploadUrl || !publicUrl) {
-        throw new Error("Gagal mendapatkan URL upload dari server.");
+        console.log(`[NanoBananaAI] URL upload untuk gambar ${imageIndex} berhasil didapatkan.`);
+        console.log(`[NanoBananaAI] Step 2/3 (Gambar ${imageIndex}): Mengupload file gambar...`);
+        await axios.put(uploadUrl, imageData.buffer, {
+          headers: {
+            "Content-Type": imageData.contentType,
+            "Content-Length": imageData.fileSize
+          }
+        });
+        console.log(`[NanoBananaAI] File gambar ${imageIndex} berhasil diupload.`);
+        publicUrls.push(publicUrl);
       }
-      console.log("[NanoBananaAI] URL upload berhasil didapatkan.");
-      console.log("[NanoBananaAI] Step 2/3: Mengupload file gambar...");
-      await axios.put(uploadUrl, imageData.buffer, {
-        headers: {
-          "Content-Type": imageData.contentType,
-          "Content-Length": imageData.fileSize
-        }
-      });
-      console.log("[NanoBananaAI] File gambar berhasil diupload.");
-      console.log("[NanoBananaAI] Step 3/3: Memulai proses generasi gambar...");
+      console.log("\n[NanoBananaAI] Step 3/3: Memulai proses generasi gambar...");
       const generatePayload = {
         prompt: prompt,
         styleId: styleId,
         mode: "image",
-        imageUrl: publicUrl,
-        imageUrls: [publicUrl]
+        imageUrl: publicUrls[0],
+        imageUrls: publicUrls
       };
       const response = await this.api.post("/api/generate-image", generatePayload, {
         headers: {

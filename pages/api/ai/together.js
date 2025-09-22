@@ -59,7 +59,7 @@ class TogetherAPI {
       const response = await axios.get(apiKeyUrl);
       const keysData = response?.data?.data;
       if (!keysData || keysData.length === 0) throw new Error("Tidak ada API key yang diterima.");
-      const apiKey = keysData[12]?.apiKey;
+      const apiKey = keysData[18]?.apiKey;
       if (!apiKey) throw new Error("Gagal mengekstrak API key pada urutan ke-12.");
       this.apiKey = apiKey;
       this.api = axios.create({

@@ -111,17 +111,21 @@ class NanoBananaAI {
       let response;
       if (imageUrl) {
         this._log(`Editing with prompt: "${prompt}"`);
-        const {
-          buffer: imgBuffer,
-          mime: contentType,
-          filename
-        } = await this._getImageDetails(imageUrl);
         const formData = new FormData();
         formData.append("prompt", prompt);
-        formData.append("images", imgBuffer, {
-          filename: filename,
-          contentType: contentType
-        });
+        const imageUrls = Array.isArray(imageUrl) ? imageUrl : [imageUrl];
+        this._log(`Processing ${imageUrls.length} image(s)...`);
+        for (const url of imageUrls) {
+          const {
+            buffer: imgBuffer,
+            mime: contentType,
+            filename
+          } = await this._getImageDetails(url);
+          formData.append("images", imgBuffer, {
+            filename: filename,
+            contentType: contentType
+          });
+        }
         Object.entries(options).forEach(([k, v]) => {
           if (v !== undefined) formData.append(k, v);
         });

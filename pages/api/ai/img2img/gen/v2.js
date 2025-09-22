@@ -180,17 +180,28 @@ class NanoBananaAI {
     ...rest
   }) {
     if (!prompt) throw new Error("prompt diperlukan untuk Image-to-Image generation");
-    if (!imageUrl) throw new Error("imageUrl diperlukan untuk Image-to-Image generation");
+    if (!imageUrl || Array.isArray(imageUrl) && imageUrl.length === 0) {
+      throw new Error("imageUrl (tunggal atau dalam array) diperlukan untuk Image-to-Image generation");
+    }
     this.log(`Membuat task Image-to-Image dengan prompt: "${prompt}"`);
     try {
-      const processedImage = await this._handleImageUrl(imageUrl);
-      const mimeType = processedImage.substring(processedImage.indexOf(":") + 1, processedImage.indexOf(";"));
-      const uploadedImageUrl = await this.uploadImage(processedImage, mimeType);
+      const urlsToProcess = Array.isArray(imageUrl) ? imageUrl : [imageUrl];
+      this.log(`Akan memproses dan mengunggah ${urlsToProcess.length} gambar.`);
+      const uploadedImageUrls = [];
+      for (const singleImageUrl of urlsToProcess) {
+        this.log("Memproses gambar...");
+        const processedImage = await this._handleImageUrl(singleImageUrl);
+        const mimeType = processedImage.substring(processedImage.indexOf(":") + 1, processedImage.indexOf(";"));
+        this.log("Mengunggah gambar...");
+        const uploadedUrl = await this.uploadImage(processedImage, mimeType);
+        uploadedImageUrls.push(uploadedUrl);
+        this.log(`Gambar berhasil diunggah: ${uploadedUrl}`);
+      }
       const payload = {
         0: {
           json: {
             prompt: prompt,
-            imageUrls: [uploadedImageUrl],
+            imageUrls: uploadedImageUrls,
             outputFormat: outputFormat,
             imageSize: imageSize,
             ...rest

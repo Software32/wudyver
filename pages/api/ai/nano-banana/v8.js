@@ -247,10 +247,11 @@ class DeepFish {
     this.log("Memulai proses Image-to-Image...");
     if (!imageUrl) throw new Error("imageUrl diperlukan untuk img2img.");
     const workflowId = 83;
+    const imageUrls = Array.isArray(imageUrl) ? imageUrl : [imageUrl];
     const inputs = {
       prompt: prompt,
       num_images: rest.num_images || 1,
-      image_urls: [imageUrl]
+      image_urls: imageUrls
     };
     return await this._executeWorkflow({
       workflowId: workflowId,

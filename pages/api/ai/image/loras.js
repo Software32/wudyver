@@ -2,6 +2,53 @@ import axios from "axios";
 import FormData from "form-data";
 import SpoofHead from "@/lib/spoof-head";
 import apiConfig from "@/configs/apiConfig";
+class ImageUploader {
+  constructor(options = {}) {
+    console.log("Proses: Inisialisasi ImageUploader");
+    this.api = axios.create({
+      baseURL: options.baseURL || `https://${apiConfig.DOMAIN_URL}/api/tools`
+    });
+  }
+  async upload(lorasResponseData) {
+    console.log("Proses: Memulai upload gambar...");
+    const base64String = lorasResponseData?.image?.b64_json;
+    if (!base64String) {
+      console.error("Proses: Gagal! Data gambar base64 tidak ditemukan dalam respons.");
+      return {
+        success: false,
+        error: "Data base64 tidak ditemukan.",
+        statusCode: 400
+      };
+    }
+    try {
+      const imageBuffer = Buffer.from(base64String, "base64");
+      console.log(`Proses: Konversi base64 ke Buffer berhasil (ukuran: ${imageBuffer.length} bytes).`);
+      const form = new FormData();
+      form.append("file", imageBuffer, {
+        filename: "generated-image.jpeg",
+        contentType: "image/jpeg"
+      });
+      console.log("Proses: Mengirim form-data ke API upload...");
+      const response = await this.api.post("/upload", form, {
+        headers: {
+          ...form.getHeaders()
+        }
+      });
+      console.log("Proses: Upload berhasil!");
+      return response.data;
+    } catch (error) {
+      console.error("Proses: Terjadi kesalahan saat mengunggah gambar!");
+      const errorMessage = error.response?.data?.message || error.message || "Terjadi kesalahan yang tidak diketahui";
+      const statusCode = error.response?.status || 500;
+      console.error(`Detail Error: Status ${statusCode} - ${errorMessage}`);
+      return {
+        success: false,
+        error: errorMessage,
+        statusCode: statusCode
+      };
+    }
+  }
+}
 const LORA_MODELS = [{
   id: 9,
   name: "Icons",
@@ -125,59 +172,10 @@ class AxiosLoras {
       console.log("Proses: Mengirim data payload ke API:", payload);
       const response = await this.api.post("/image", payload);
       console.log("Proses: Permintaan berhasil, respons diterima.");
-      return {
-        success: true,
-        data: response.data
-      };
+      const uploader = new ImageUploader();
+      return await uploader.upload(response.data);
     } catch (error) {
       console.error("Proses: Terjadi kesalahan saat permintaan API!");
-      const errorMessage = error.response?.data?.message || error.message || "Terjadi kesalahan yang tidak diketahui";
-      const statusCode = error.response?.status || 500;
-      console.error(`Detail Error: Status ${statusCode} - ${errorMessage}`);
-      return {
-        success: false,
-        error: errorMessage,
-        statusCode: statusCode
-      };
-    }
-  }
-}
-class ImageUploader {
-  constructor(options = {}) {
-    console.log("Proses: Inisialisasi ImageUploader");
-    this.api = axios.create({
-      baseURL: options.baseURL || `https://${apiConfig.DOMAIN_URL}/api/tools`
-    });
-  }
-  async upload(lorasResponseData) {
-    console.log("Proses: Memulai upload gambar...");
-    const base64String = lorasResponseData?.image?.b64_json;
-    if (!base64String) {
-      console.error("Proses: Gagal! Data gambar base64 tidak ditemukan dalam respons.");
-      return {
-        success: false,
-        error: "Data base64 tidak ditemukan.",
-        statusCode: 400
-      };
-    }
-    try {
-      const imageBuffer = Buffer.from(base64String, "base64");
-      console.log(`Proses: Konversi base64 ke Buffer berhasil (ukuran: ${imageBuffer.length} bytes).`);
-      const form = new FormData();
-      form.append("file", imageBuffer, {
-        filename: "generated-image.jpeg",
-        contentType: "image/jpeg"
-      });
-      console.log("Proses: Mengirim form-data ke API upload...");
-      const response = await this.api.post("/upload", form, {
-        headers: {
-          ...form.getHeaders()
-        }
-      });
-      console.log("Proses: Upload berhasil!");
-      return response.data;
-    } catch (error) {
-      console.error("Proses: Terjadi kesalahan saat mengunggah gambar!");
       const errorMessage = error.response?.data?.message || error.message || "Terjadi kesalahan yang tidak diketahui";
       const statusCode = error.response?.status || 500;
       console.error(`Detail Error: Status ${statusCode} - ${errorMessage}`);

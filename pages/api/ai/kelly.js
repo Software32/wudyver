@@ -276,22 +276,12 @@ class KellyAPI {
         });
       }
       console.log(`[Log] Proses berhasil: ${endpoint}`);
-      return {
-        status: "success",
-        message: "Permintaan berhasil diproses.",
-        data: response.data,
-        details: null
-      };
+      return response.data;
     } catch (error) {
       console.error(`[Log] Error pada ${endpoint}:`, error?.response?.data || error.message);
-      return {
-        status: "error",
-        message: "Terjadi kesalahan saat berkomunikasi dengan API.",
-        data: null,
-        details: error?.response?.data || {
-          code: "NETWORK_ERROR",
-          message: error.message
-        }
+      return error?.response?.data || {
+        code: "NETWORK_ERROR",
+        message: error.message
       };
     }
   }

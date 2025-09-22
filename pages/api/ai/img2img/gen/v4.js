@@ -17,27 +17,32 @@ class NanoBananaAI {
     numImages = 1,
     outputFormat = "jpeg"
   }) {
-    if (!imageUrl) throw new Error("imageUrl (URL, Base64, atau Buffer) diperlukan");
+    if (!imageUrl || Array.isArray(imageUrl) && imageUrl.length === 0) {
+      throw new Error("imageUrl (URL, Base64, atau Buffer, tunggal atau dalam array) diperlukan");
+    }
     if (!prompt) throw new Error("prompt diperlukan untuk image editing");
     this.log(`Memulai proses image editing dengan prompt: "${prompt}"`);
     try {
-      let processedImageUrl;
-      if (typeof imageUrl === "string") {
-        processedImageUrl = imageUrl;
-        this.log("Input gambar terdeteksi sebagai string (URL/Base64)");
-      } else if (Buffer.isBuffer(imageUrl)) {
-        const mimeType = "image/jpeg";
-        processedImageUrl = `data:${mimeType};base64,${imageUrl.toString("base64")}`;
-        this.log("Input gambar terdeteksi sebagai Buffer dan telah dikonversi ke Base64");
-      } else {
-        throw new Error("Format imageUrl tidak didukung. Gunakan URL, Base64, atau Buffer.");
-      }
+      const urlsToProcess = Array.isArray(imageUrl) ? imageUrl : [imageUrl];
+      this.log(`Memproses ${urlsToProcess.length} gambar.`);
+      const processedImageUrls = urlsToProcess.map((img, index) => {
+        if (typeof img === "string") {
+          this.log(`Input gambar #${index + 1} terdeteksi sebagai string (URL/Base64)`);
+          return img;
+        } else if (Buffer.isBuffer(img)) {
+          const mimeType = "image/jpeg";
+          this.log(`Input gambar #${index + 1} terdeteksi sebagai Buffer dan telah dikonversi ke Base64`);
+          return `data:${mimeType};base64,${img.toString("base64")}`;
+        } else {
+          throw new Error(`Format imageUrl #${index + 1} tidak didukung. Gunakan URL, Base64, atau Buffer.`);
+        }
+      });
       this.log("Mengirim permintaan editing ke API...");
       const createResponse = await axios.post(`${this.baseURL}/edit`, {
         prompt: prompt,
         num_images: numImages,
         output_format: outputFormat,
-        image_urls: [processedImageUrl]
+        image_urls: processedImageUrls
       }, {
         headers: {
           Authorization: `Key ${this.apiKey}`,
