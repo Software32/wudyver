@@ -191,8 +191,19 @@ class PhotoToVideoAI {
       };
       if (imageUrl) {
         console.log("Proses: Mode Image-to-Image, mengunggah gambar terlebih dahulu.");
-        const uploadedUrl = await this._upload(imageUrl);
-        data.input_images = [uploadedUrl];
+        const imageUrls = Array.isArray(imageUrl) ? imageUrl : [imageUrl];
+        const uploadedUrls = [];
+        for (const url of imageUrls) {
+          try {
+            const uploadedUrl = await this._upload(url);
+            uploadedUrls.push(uploadedUrl);
+          } catch (error) {
+            console.error(`Gagal mengunggah gambar dari URL: ${url}`, error);
+          }
+        }
+        if (uploadedUrls.length > 0) {
+          data.input_images = uploadedUrls;
+        }
       }
       console.log("Proses: Mengirim permintaan generate dengan data:", data);
       const response = await this.axios.post("/images/generate", data);
