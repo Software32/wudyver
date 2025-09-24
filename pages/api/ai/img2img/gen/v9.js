@@ -25,7 +25,9 @@ class AIGenerator {
   _generateRandomString(length) {
     const chars = "abcdefghijklmnopqrstuvwxyz0123456789";
     let result = "";
-    for (let i = 0; i < length; i++) result += chars.charAt(Math.floor(Math.random() * chars.length));
+    for (let i = 0; i < length; i++) {
+      result += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
     return result;
   }
   _createLoginData() {
@@ -39,67 +41,83 @@ class AIGenerator {
       deviceModel: `SDK_${this._generateRandomString(4)}`
     };
   }
-  async _login() {
-    try {
-      console.log("Mencoba login...");
-      const response = await axios.post(this.config.baseURL + this.config.endpoints.login, this._createLoginData());
-      if (response.data?.token) {
-        this.token = response.data.token;
-        console.log("Login berhasil.");
-      } else throw new Error("Respons login tidak valid.");
-    } catch (error) {
-      console.error("Login gagal:", error.response?.data || error.message);
-      throw error;
+  _buildHeaders() {
+    if (!this.token) {
+      throw new Error("Token tidak tersedia. Silakan login terlebih dahulu.");
     }
-  }
-  async _ensureLogin() {
-    if (!this.token) await this._login();
-  }
-  _getAuthHeaders() {
-    if (!this.token) throw new Error("Token tidak ada.");
     return {
       "Content-Type": "application/json",
       Authorization: `Bearer ${this.token}`
     };
   }
-  async _uploadFile(file) {
-    console.log(` -> Meminta izin unggah untuk ${file.fileName}...`);
-    const presignResponse = await axios.post(this.config.baseURL + this.config.endpoints.uploadImages, {
-      images: [{
-        fileName: file.fileName,
-        fileType: file.fileType
-      }]
-    }, {
-      headers: this._getAuthHeaders()
-    });
-    const uploadInfo = presignResponse.data.data[0];
-    if (!uploadInfo?.uploadUrl) throw new Error("Gagal mendapatkan pre-signed URL.");
-    console.log(` -> Mengunggah data ${file.fileName}...`);
-    await axios.put(uploadInfo.uploadUrl, file.data, {
-      headers: {
-        "Content-Type": file.fileType
+  async _login() {
+    console.log("PROSES: Mencoba untuk login...");
+    try {
+      const response = await axios.post(`${this.config.baseURL}${this.config.endpoints.login}`, this._createLoginData());
+      if (response.data && response.data.token) {
+        this.token = response.data.token;
+        console.log("SUKSES: Login berhasil dan token diterima.");
+      } else {
+        throw new Error("Respons login tidak valid atau tidak mengandung token.");
       }
-    });
-    console.log(` -> Unggah ${file.fileName} berhasil.`);
-    return uploadInfo.fileUrl;
+    } catch (error) {
+      console.error("GAGAL: Terjadi kesalahan saat login.", error.response ? error.response.data : error.message);
+      throw error;
+    }
+  }
+  async _ensureLogin() {
+    if (!this.token) {
+      console.log("LOG: Token tidak ditemukan, menjalankan proses login...");
+      await this._login();
+    }
+  }
+  async _uploadFile(file) {
+    console.log(`PROSES: Memulai proses unggah untuk ${file.fileName}...`);
+    try {
+      console.log(` -> Meminta izin unggah...`);
+      const presignResponse = await axios.post(`${this.config.baseURL}${this.config.endpoints.uploadImages}`, {
+        images: [{
+          fileName: file.fileName,
+          fileType: file.fileType
+        }]
+      }, {
+        headers: this._buildHeaders()
+      });
+      const uploadInfo = presignResponse.data.data[0];
+      if (!uploadInfo || !uploadInfo.uploadUrl) {
+        throw new Error("Gagal mendapatkan URL pre-signed dari server.");
+      }
+      console.log(` -> SUKSES: URL pre-signed diterima.`);
+      console.log(` -> Mengunggah data file...`);
+      await axios.put(uploadInfo.uploadUrl, file.data, {
+        headers: {
+          "Content-Type": file.fileType
+        }
+      });
+      console.log(`SUKSES: Unggah untuk ${file.fileName} berhasil.`);
+      return uploadInfo.fileUrl;
+    } catch (error) {
+      console.error(`GAGAL: Terjadi kesalahan saat mengunggah ${file.fileName}.`, error.response ? error.response.data : error.message);
+      throw error;
+    }
   }
   async _pollStatus(requestId) {
-    console.log(`Memulai polling untuk requestId: ${requestId}...`);
-    const pollUrl = this.config.baseURL + this.config.endpoints.chatPoll + requestId;
+    console.log(`PROSES: Memulai polling untuk requestId: ${requestId}...`);
+    const pollUrl = `${this.config.baseURL}${this.config.endpoints.chatPoll}${requestId}`;
     while (true) {
       try {
         const {
           data
         } = await axios.get(pollUrl, {
-          headers: this._getAuthHeaders()
+          headers: this._buildHeaders()
         });
         if (data.isCompleted) {
-          console.log("Tugas selesai!");
+          console.log("SUKSES: Tugas telah selesai.");
           return data;
         }
-        console.log("Status: Belum selesai. Mencoba lagi...");
+        console.log("LOG: Status tugas belum selesai. Menunggu 3 detik sebelum mencoba lagi...");
       } catch (error) {
-        console.error("Error saat polling:", error.response?.data || error.message);
+        console.error("GAGAL: Terjadi kesalahan saat polling status.", error.response ? error.response.data : error.message);
       }
       await new Promise(resolve => setTimeout(resolve, 3e3));
     }
@@ -109,51 +127,63 @@ class AIGenerator {
     imageUrl,
     ...rest
   }) {
-    if (!prompt) throw new Error("`prompt` wajib diisi.");
-    await this._ensureLogin();
-    const imageArray = imageUrl ? Array.isArray(imageUrl) ? imageUrl : [imageUrl] : [];
-    const finalImageUrls = [];
-    if (imageArray.length > 0) {
-      console.log(`Memproses ${imageArray.length} gambar secara sekuensial...`);
-      for (const image of imageArray) {
-        let processedUrl;
-        if (typeof image === "string" && image.startsWith("http")) {
-          console.log("Mendeteksi URL web, menambahkannya secara langsung.");
-          processedUrl = image;
-        } else if (typeof image === "string" && image.startsWith("data:")) {
-          console.log("Mendeteksi data Base64, memproses untuk diunggah...");
-          const match = image.match(/^data:(.+);base64,(.*)$/);
-          if (!match) throw new Error("Format string Base64 tidak valid.");
-          const [, fileType, data] = match;
-          const extension = fileType.split("/")[1] || "bin";
-          processedUrl = await this._uploadFile({
-            fileName: `upload.${extension}`,
-            fileType: fileType,
-            data: Buffer.from(data, "base64")
-          });
-        } else if (typeof image === "object" && image.data instanceof Buffer) {
-          console.log(`Mendeteksi Buffer untuk file "${image.fileName}", memproses untuk diunggah...`);
-          if (!image.fileType || !image.fileName) throw new Error("Objek gambar Buffer harus memiliki `fileType` dan `fileName`.");
-          processedUrl = await this._uploadFile(image);
-        } else {
-          throw new Error("Format gambar tidak didukung.");
-        }
-        finalImageUrls.push(processedUrl);
+    console.log("PROSES: Memulai alur kerja generate...");
+    try {
+      if (!prompt) {
+        throw new Error("Parameter `prompt` wajib diisi.");
       }
+      await this._ensureLogin();
+      const imageArray = imageUrl ? Array.isArray(imageUrl) ? imageUrl : [imageUrl] : [];
+      const finalImageUrls = [];
+      if (imageArray.length > 0) {
+        console.log(`LOG: Memproses ${imageArray.length} gambar...`);
+        for (const image of imageArray) {
+          let processedUrl;
+          if (typeof image === "string" && image.startsWith("http")) {
+            console.log(" -> Mendeteksi URL, menambahkannya secara langsung.");
+            processedUrl = image;
+          } else if (typeof image === "string" && image.startsWith("data:")) {
+            console.log(" -> Mendeteksi data Base64, memproses untuk diunggah...");
+            const match = image.match(/^data:(.+);base64,(.*)$/);
+            if (!match) throw new Error("Format string Base64 tidak valid.");
+            const [, fileType, data] = match;
+            const extension = fileType.split("/")[1] || "bin";
+            processedUrl = await this._uploadFile({
+              fileName: `upload.${extension}`,
+              fileType: fileType,
+              data: Buffer.from(data, "base64")
+            });
+          } else if (typeof image === "object" && image.data instanceof Buffer) {
+            console.log(` -> Mendeteksi Buffer untuk file "${image.fileName}", memproses untuk diunggah...`);
+            if (!image.fileType || !image.fileName) {
+              throw new Error("Objek gambar Buffer harus memiliki properti `fileType` dan `fileName`.");
+            }
+            processedUrl = await this._uploadFile(image);
+          } else {
+            throw new Error(`Format gambar tidak didukung untuk item: ${JSON.stringify(image)}`);
+          }
+          finalImageUrls.push(processedUrl);
+        }
+      }
+      const chatData = {
+        prompt: prompt,
+        imageUrls: finalImageUrls,
+        ...rest
+      };
+      console.log("PROSES: Mengirim permintaan tugas final dengan data:", chatData);
+      const initialResponse = await axios.post(`${this.config.baseURL}${this.config.endpoints.chat}`, chatData, {
+        headers: this._buildHeaders()
+      });
+      if (initialResponse.data && initialResponse.data.requestId) {
+        console.log(`SUKSES: Permintaan tugas diterima dengan requestId: ${initialResponse.data.requestId}.`);
+        return await this._pollStatus(initialResponse.data.requestId);
+      } else {
+        throw new Error("Respons dari server tidak mengandung requestId.");
+      }
+    } catch (error) {
+      console.error("GAGAL: Terjadi kesalahan besar pada proses generate.", error.message);
+      return null;
     }
-    const chatData = {
-      prompt: prompt,
-      imageUrls: finalImageUrls,
-      ...rest
-    };
-    console.log("Mengirim permintaan tugas final:", chatData);
-    const initialResponse = await axios.post(this.config.baseURL + this.config.endpoints.chat, chatData, {
-      headers: this._getAuthHeaders()
-    });
-    if (initialResponse.data.requestId) {
-      return await this._pollStatus(initialResponse.data.requestId);
-    }
-    return initialResponse.data;
   }
 }
 export default async function handler(req, res) {
