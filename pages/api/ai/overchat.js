@@ -121,8 +121,9 @@ class OverchatAPI {
     chatId,
     prompt,
     messages,
-    model = "x-ai/gpt-4.1",
-    personaId = "grok-3-beta-mini",
+    model,
+    personaId,
+    mode = "chat",
     frequency_penalty = 0,
     max_tokens = 2048,
     presence_penalty = 0,
@@ -138,101 +139,92 @@ class OverchatAPI {
       if (!this.userId) {
         await this.getId();
       }
-      let currentChatId = chatId;
-      if (!currentChatId && endpointType === "thread") {
-        currentChatId = await this.createId();
-      }
-      const allImageUrls = [];
-      if (typeof imageUrl === "string" && imageUrl) {
-        allImageUrls.push(imageUrl);
-      }
-      if (Array.isArray(imageUrls) && imageUrls.length > 0) {
-        allImageUrls.push(...imageUrls);
-      }
-      let uploadedFilesInfo = [];
-      let messageLinks = [];
-      if (allImageUrls.length > 0) {
-        if (endpointType === "completions") {
-          console.warn("Peringatan: Mengunggah gambar tidak didukung untuk endpoint 'completions'. Gambar akan diabaikan.");
-        } else {
-          for (const url of allImageUrls) {
-            const downloadedFile = await this.downloadImage(url);
-            const uploadResult = await this.uploadImage(downloadedFile.buffer, downloadedFile.filename, downloadedFile.contentType);
-            uploadedFilesInfo.push({
-              path: downloadedFile.filename,
-              link: uploadResult.link,
-              croppedImageLink: uploadResult.croppedImageLink
-            });
-            messageLinks.push(uploadResult.link);
-          }
-        }
-      }
-      const requestData = {
-        model: model,
-        personaId: personaId,
-        frequency_penalty: frequency_penalty,
-        max_tokens: max_tokens,
-        presence_penalty: presence_penalty,
-        stream: stream,
-        temperature: temperature,
-        top_p: top_p,
-        ...rest
-      };
       let requestEndpoint = "";
-      if (endpointType === "thread") {
-        requestEndpoint = `${this.baseURL}/chat/thread`;
-        requestData.chatId = currentChatId;
-        if (messageLinks.length > 0) {
-          requestData.links = messageLinks;
+      let requestData = {};
+      let isImageMode = mode.toLowerCase() === "image";
+      if (isImageMode) {
+        if (!prompt) {
+          throw new Error("Prompt is required for image generation.");
         }
-      } else if (endpointType === "completions") {
-        requestEndpoint = `${this.baseURL}/chat/completions`;
+        requestEndpoint = `${this.baseURL}/images/generations`;
+        requestData = {
+          chatId: chatId,
+          prompt: prompt,
+          model: model || "alibaba/qwen-image",
+          personaId: personaId || "qwen-image",
+          ...rest
+        };
       } else {
-        throw new Error("Invalid endpointType. Must be 'thread' or 'completions'.");
-      }
-      if (prompt) {
-        requestData.messages = [{
-          id: crypto.randomUUID(),
-          role: "user",
-          content: prompt,
-          ...endpointType === "thread" && uploadedFilesInfo.length > 0 && {
-            metadata: {
-              files: uploadedFilesInfo
-            }
-          }
-        }];
-      } else if (messages) {
-        requestData.messages = messages.map(msg => ({
-          id: msg.id || crypto.randomUUID(),
-          role: msg.role,
-          content: msg.content,
-          ...msg.metadata && {
-            metadata: msg.metadata
-          }
-        }));
-        if (endpointType === "thread" && uploadedFilesInfo.length > 0) {
-          const lastUserMessageIndex = requestData.messages.findLastIndex(msg => msg.role === "user");
-          if (lastUserMessageIndex !== -1) {
-            if (!requestData.messages[lastUserMessageIndex].metadata) {
-              requestData.messages[lastUserMessageIndex].metadata = {};
-            }
-            if (!requestData.messages[lastUserMessageIndex].metadata.files) {
-              requestData.messages[lastUserMessageIndex].metadata.files = [];
-            }
-            requestData.messages[lastUserMessageIndex].metadata.files.push(...uploadedFilesInfo);
+        requestEndpoint = endpointType === "thread" ? `${this.baseURL}/chat/thread` : `${this.baseURL}/chat/completions`;
+        requestData = {
+          model: model || "x-ai/gpt-4.1",
+          personaId: personaId || "grok-3-beta-mini",
+          frequency_penalty: frequency_penalty,
+          max_tokens: max_tokens,
+          presence_penalty: presence_penalty,
+          stream: stream,
+          temperature: temperature,
+          top_p: top_p,
+          ...rest
+        };
+        const allImageUrls = [];
+        if (typeof imageUrl === "string" && imageUrl) allImageUrls.push(imageUrl);
+        if (Array.isArray(imageUrls) && imageUrls.length > 0) allImageUrls.push(...imageUrls);
+        let uploadedFilesInfo = [];
+        let messageLinks = [];
+        if (allImageUrls.length > 0) {
+          if (endpointType === "completions") {
+            console.warn("Warning: Image uploads are not supported for the 'completions' endpoint and will be ignored.");
           } else {
-            requestData.messages.push({
-              id: crypto.randomUUID(),
-              role: "user",
-              content: "",
-              metadata: {
-                files: uploadedFilesInfo
-              }
-            });
+            for (const url of allImageUrls) {
+              const downloadedFile = await this.downloadImage(url);
+              const uploadResult = await this.uploadImage(downloadedFile.buffer, downloadedFile.filename, downloadedFile.contentType);
+              uploadedFilesInfo.push({
+                path: downloadedFile.filename,
+                link: uploadResult.link,
+                croppedImageLink: uploadResult.croppedImageLink
+              });
+              messageLinks.push(uploadResult.link);
+            }
           }
         }
-      } else {
-        throw new Error("Anda harus menyediakan prompt, array messages, atau imageUrl(s).");
+        if (prompt) {
+          requestData.messages = [{
+            id: crypto.randomUUID(),
+            role: "user",
+            content: prompt
+          }];
+          if (endpointType === "thread" && uploadedFilesInfo.length > 0) {
+            requestData.messages[0].metadata = {
+              files: uploadedFilesInfo
+            };
+          }
+        } else if (messages) {
+          requestData.messages = messages.map(msg => ({
+            ...msg,
+            id: msg.id || crypto.randomUUID()
+          }));
+          if (endpointType === "thread" && uploadedFilesInfo.length > 0) {
+            const lastUserMessageIndex = requestData.messages.findLastIndex(msg => msg.role === "user");
+            if (lastUserMessageIndex !== -1) {
+              if (!requestData.messages[lastUserMessageIndex].metadata) requestData.messages[lastUserMessageIndex].metadata = {};
+              if (!requestData.messages[lastUserMessageIndex].metadata.files) requestData.messages[lastUserMessageIndex].metadata.files = [];
+              requestData.messages[lastUserMessageIndex].metadata.files.push(...uploadedFilesInfo);
+            }
+          }
+        } else {
+          throw new Error("You must provide a 'prompt', a 'messages' array, or 'imageUrl(s)'.");
+        }
+        if (endpointType === "thread") {
+          let currentChatId = chatId;
+          if (!currentChatId) {
+            currentChatId = await this.createId(requestData.personaId);
+          }
+          requestData.chatId = currentChatId;
+          if (messageLinks.length > 0) {
+            requestData.links = messageLinks;
+          }
+        }
       }
       const response = await axios.post(requestEndpoint, requestData, {
         headers: {
@@ -240,13 +232,16 @@ class OverchatAPI {
           "content-type": "application/json"
         }
       });
-      return this.processChatResponse(response.data);
+      return isImageMode ? response.data : this.processChatResponse(response.data);
     } catch (error) {
-      console.error("Error in chat:", error.response ? error.response.data : error.message);
+      console.error("Error in chat function:", error.response ? error.response.data : error.message);
       throw error;
     }
   }
   processChatResponse(responseString) {
+    if (typeof responseString !== "string") {
+      return responseString;
+    }
     const lines = responseString.trim().split("\n");
     const result = {
       result: "",
@@ -265,7 +260,7 @@ class OverchatAPI {
             result.array.push(data.choices[0].delta.content);
           }
         } catch (parseError) {
-          console.error("Gagal mem-parse data streaming:", parseError, line);
+          console.error("Failed to parse streaming data:", parseError, line);
         }
       }
     }
@@ -276,7 +271,7 @@ export default async function handler(req, res) {
   const params = req.method === "GET" ? req.query : req.body;
   if (!params.prompt) {
     return res.status(400).json({
-      error: "Prompt are required."
+      error: "Parameter 'prompt' is required."
     });
   }
   try {

@@ -50,7 +50,7 @@ const createSpinner = text => ora({
   text: text,
   spinner: "moon"
 });
-const Provider = ["Catbox", "Doodstream", "Fexnet", "FileDitch", "Filebin", "Fileio", "Filezone", "FreeImage", "Gofile", "Gozic", "Hostfile", "Imgbb", "Kitc", "Kraken", "MediaUpload", "Eax", "Nullbyte", "Vello", "Lusia", "Pomf2", "Sazumi", "Sohu", "Gizai", "Sojib", "Instantiated", "Exonity", "Zcy", "BltokProject", "Maricon", "Nauval", "Supa", "Knowee", "Puticu", "Stylar", "Telegraph", "Tmpfiles", "Cloudmini", "Babup", "Transfersh", "Ucarecdn", "Uguu", "UploadEE", "Uploadify", "Videy", "ZippyShare", "Quax", "Aceimg"];
+const Provider = ["Catbox", "Doodstream", "Fexnet", "Getshared", "Bash", "FileDitch", "Filebin", "Fileio", "Filezone", "FreeImage", "Gofile", "Gozic", "Hostfile", "Imgbb", "Kitc", "Kraken", "MediaUpload", "Eax", "Nullbyte", "Vello", "Lusia", "Pomf2", "Sazumi", "Sohu", "Gizai", "Sojib", "Instantiated", "Exonity", "Zcy", "BltokProject", "Maricon", "Nauval", "Supa", "Knowee", "Puticu", "Stylar", "Telegraph", "Tmpfiles", "Cloudmini", "Babup", "Transfersh", "Ucarecdn", "Uguu", "UploadEE", "Uploadify", "Videy", "ZippyShare", "Quax", "Aceimg"];
 class Uploader {
   constructor() {
     this.Provider = Provider;
@@ -469,6 +469,52 @@ class Uploader {
       });
       spinner.succeed(chalk.green("Uploaded to Fex.net"));
       return (await response.json()).upload.attachment.content_url;
+    } catch (error) {
+      handleError(error, spinner);
+    }
+  }
+  async Getshared(content) {
+    const spinner = createSpinner("Uploading to Getshared").start();
+    try {
+      const {
+        formData,
+        ext
+      } = await createFormData(content, "files");
+      formData.append("upload_id", generateSlug);
+      formData.append("file_uid", generateSlug);
+      formData.append("original_path", "");
+      const response = await fetch("https://getshared.com/upload", {
+        method: "POST",
+        body: formData,
+        headers: {
+          "User-Agent": fakeUa(),
+        }
+      });
+      spinner.succeed(chalk.green("Uploaded to Getshared"));
+      const files = await response.json();
+      return files.files[0]?.url;
+    } catch (error) {
+      handleError(error, spinner);
+    }
+  }
+  async Bash(content) {
+    const spinner = createSpinner("Uploading to Bash").start();
+    try {
+      const {
+        formData,
+        ext
+      } = await createFormData(content, "file_1");
+      formData.append("json", "true");
+      const response = await fetch("https://bashupload.com/", {
+        method: "POST",
+        body: formData,
+        headers: {
+          "User-Agent": fakeUa(),
+        }
+      });
+      spinner.succeed(chalk.green("Uploaded to Bash"));
+      const files = JSON.parse(await response.text());
+      return files.file_1?.url;
     } catch (error) {
       handleError(error, spinner);
     }
