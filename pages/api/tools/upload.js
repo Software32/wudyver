@@ -1118,7 +1118,7 @@ export default async function handler(req, res) {
   try {
     let buffer;
     let fileName = "unknown_file";
-    let host = req.query.host || "Instantiated";
+    let host = req.query.host || "Tmpfiles";
     const contentType = req.headers["content-type"] || "";
     if (contentType.startsWith("multipart/form-data")) {
       const {

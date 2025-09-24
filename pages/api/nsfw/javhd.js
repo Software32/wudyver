@@ -12,7 +12,7 @@ class Downloader {
       const link = encodeURIComponent(`https://javhd.com/en/search?q=${encodeURIComponent(query)}`);
       const {
         data: html
-      } = await axios.get(`https://${apiConfig.DOMAIN_URL}/api/tools/web/html/v8?url=${link}`, {
+      } = await axios.get(`https://${apiConfig.DOMAIN_URL}/api/tools/web/html/v12?url=${link}`, {
         headers: this.headers
       });
       const $ = cheerio.load(html);
