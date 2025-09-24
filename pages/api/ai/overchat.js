@@ -1,6 +1,7 @@
 import axios from "axios";
 import crypto from "crypto";
 import FormData from "form-data";
+import SpoofHead from "@/lib/spoof-head";
 class OverchatAPI {
   constructor() {
     this.getRandomValues = crypto.getRandomValues.bind(crypto);
@@ -49,9 +50,11 @@ class OverchatAPI {
       "x-device-language": "id-ID",
       "x-device-platform": "web",
       "x-device-uuid": this.deviceUUID,
-      "x-device-version": this.deviceVersion
+      "x-device-version": this.deviceVersion,
+      ...SpoofHead()
     };
     this.userId = null;
+    this.personas = null;
   }
   async getId() {
     try {
@@ -64,13 +67,37 @@ class OverchatAPI {
       throw error;
     }
   }
-  async createId(personaId = "best-free-ai-chat") {
+  async getPersonas() {
+    try {
+      const response = await axios.get(`${this.baseURL}/personas`, {
+        headers: this.headers
+      });
+      this.personas = response.data;
+      return this.personas;
+    } catch (error) {
+      console.error("Gagal mengambil data personas:", error);
+      throw error;
+    }
+  }
+  async createId(personaId) {
     try {
       if (!this.userId) {
         await this.getId();
       }
+      let finalPersonaId = personaId;
+      if (!finalPersonaId) {
+        if (!this.personas) {
+          await this.getPersonas();
+        }
+        const defaultPersona = this.personas.find(p => p.isDefault) || this.personas[0];
+        if (defaultPersona) {
+          finalPersonaId = defaultPersona.id;
+        } else {
+          throw new Error("Tidak ada persona yang tersedia.");
+        }
+      }
       const response = await axios.post(`${this.baseURL}/chat/${this.userId}`, {
-        personaId: personaId
+        personaId: finalPersonaId
       }, {
         headers: {
           ...this.headers,
@@ -95,7 +122,7 @@ class OverchatAPI {
         contentType: contentType
       };
     } catch (error) {
-      throw new Error(`Failed to download image from URL: ${imageUrl}, Error: ${error.message}`);
+      throw new Error(`Gagal mengunduh gambar dari URL: ${imageUrl}, Error: ${error.message}`);
     }
   }
   async uploadImage(fileBuffer, filename, contentType = "image/png") {
@@ -113,7 +140,7 @@ class OverchatAPI {
       });
       return response.data;
     } catch (error) {
-      console.error("Error uploading image:", error.response ? error.response.data : error.message);
+      console.error("Error saat mengunggah gambar:", error.response ? error.response.data : error.message);
       throw error;
     }
   }
@@ -139,26 +166,42 @@ class OverchatAPI {
       if (!this.userId) {
         await this.getId();
       }
+      if (!this.personas) {
+        await this.getPersonas();
+      }
+      let selectedPersona = null;
+      if (personaId) {
+        selectedPersona = this.personas.find(p => p.id === personaId);
+      } else if (model) {
+        selectedPersona = this.personas.find(p => p.model === model);
+      } else {
+        selectedPersona = this.personas.find(p => p.isDefault) || this.personas[0];
+      }
+      if (!selectedPersona) {
+        throw new Error("Tidak dapat menemukan persona yang cocok. Coba tentukan personaId atau model yang valid.");
+      }
+      const finalModel = model || selectedPersona.model;
+      const finalPersonaId = personaId || selectedPersona.id;
       let requestEndpoint = "";
       let requestData = {};
       let isImageMode = mode.toLowerCase() === "image";
       if (isImageMode) {
         if (!prompt) {
-          throw new Error("Prompt is required for image generation.");
+          throw new Error("Prompt diperlukan untuk membuat gambar.");
         }
         requestEndpoint = `${this.baseURL}/images/generations`;
         requestData = {
           chatId: chatId,
           prompt: prompt,
-          model: model || "alibaba/qwen-image",
-          personaId: personaId || "qwen-image",
+          model: finalModel || "alibaba/qwen-image",
+          personaId: finalPersonaId || "qwen-image",
           ...rest
         };
       } else {
         requestEndpoint = endpointType === "thread" ? `${this.baseURL}/chat/thread` : `${this.baseURL}/chat/completions`;
         requestData = {
-          model: model || "x-ai/gpt-4.1",
-          personaId: personaId || "grok-3-beta-mini",
+          model: finalModel,
+          personaId: finalPersonaId,
           frequency_penalty: frequency_penalty,
           max_tokens: max_tokens,
           presence_penalty: presence_penalty,
@@ -174,7 +217,7 @@ class OverchatAPI {
         let messageLinks = [];
         if (allImageUrls.length > 0) {
           if (endpointType === "completions") {
-            console.warn("Warning: Image uploads are not supported for the 'completions' endpoint and will be ignored.");
+            console.warn("Peringatan: Unggahan gambar tidak didukung untuk endpoint 'completions' dan akan diabaikan.");
           } else {
             for (const url of allImageUrls) {
               const downloadedFile = await this.downloadImage(url);
@@ -213,12 +256,12 @@ class OverchatAPI {
             }
           }
         } else {
-          throw new Error("You must provide a 'prompt', a 'messages' array, or 'imageUrl(s)'.");
+          throw new Error("Anda harus menyediakan 'prompt', array 'messages', atau 'imageUrl(s)'.");
         }
         if (endpointType === "thread") {
           let currentChatId = chatId;
           if (!currentChatId) {
-            currentChatId = await this.createId(requestData.personaId);
+            currentChatId = await this.createId(finalPersonaId);
           }
           requestData.chatId = currentChatId;
           if (messageLinks.length > 0) {
@@ -234,7 +277,7 @@ class OverchatAPI {
       });
       return isImageMode ? response.data : this.processChatResponse(response.data);
     } catch (error) {
-      console.error("Error in chat function:", error.response ? error.response.data : error.message);
+      console.error("Error dalam fungsi chat:", error.response ? error.response.data : error.message);
       throw error;
     }
   }
@@ -260,7 +303,7 @@ class OverchatAPI {
             result.array.push(data.choices[0].delta.content);
           }
         } catch (parseError) {
-          console.error("Failed to parse streaming data:", parseError, line);
+          console.error("Gagal mem-parsing data streaming:", parseError, line);
         }
       }
     }
@@ -271,7 +314,7 @@ export default async function handler(req, res) {
   const params = req.method === "GET" ? req.query : req.body;
   if (!params.prompt) {
     return res.status(400).json({
-      error: "Parameter 'prompt' is required."
+      error: "Parameter 'prompt' diperlukan."
     });
   }
   try {

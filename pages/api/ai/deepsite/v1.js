@@ -52,8 +52,8 @@ class AIPageGenerator {
       const parsedHtml = this._parseHtmlResponse(rawResponse);
       return {
         success: true,
-        original: rawResponse,
-        parsed: parsedHtml
+        result: parsedHtml,
+        raw: rawResponse,
       };
     } catch (error) {
       console.error("Log: Terjadi error saat proses chat AI:", error?.message || "Error tidak diketahui");
