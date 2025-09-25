@@ -5,7 +5,7 @@ import {
   v4 as uuidv4
 } from "uuid";
 import SpoofHead from "@/lib/spoof-head";
-const FIGURE_PROMPT = "Using the nano-banana model, a commercial 1/7 scale figurine of the character in the picture was created, depicting a realistic style and a realistic environment. The figurine is placed on a computer desk with a round transparent acrylic base. There is no text on the base. The computer screen shows the Zbrush modeling process of the figurine. Next to the computer screen is a BANDAI-style toy box with the original painting printed on it.";
+import PROMPT from "@/configs/ai-prompt";
 class NoteGpt {
   constructor() {
     this.httpsAgent = new https.Agent({
@@ -231,7 +231,7 @@ class NoteGpt {
     }
   }
   async generate({
-    prompt = FIGURE_PROMPT,
+    prompt = PROMPT.text,
     imageUrl,
     ...rest
   }) {

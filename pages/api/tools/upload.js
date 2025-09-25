@@ -487,7 +487,7 @@ class Uploader {
         method: "POST",
         body: formData,
         headers: {
-          "User-Agent": fakeUa(),
+          "User-Agent": fakeUa()
         }
       });
       spinner.succeed(chalk.green("Uploaded to Getshared"));
@@ -509,7 +509,7 @@ class Uploader {
         method: "POST",
         body: formData,
         headers: {
-          "User-Agent": fakeUa(),
+          "User-Agent": fakeUa()
         }
       });
       spinner.succeed(chalk.green("Uploaded to Bash"));

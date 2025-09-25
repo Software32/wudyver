@@ -1,5 +1,6 @@
 import axios from "axios";
 import FormData from "form-data";
+import apiConfig from "@/configs/apiConfig";
 import SpoofHead from "@/lib/spoof-head";
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 const wudysoftApiClient = axios.create({

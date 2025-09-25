@@ -4,7 +4,7 @@ import https from "https";
 import FormData from "form-data";
 import apiConfig from "@/configs/apiConfig";
 import SpoofHead from "@/lib/spoof-head";
-const FIGURE_PROMPT = "Using the nano-banana model, a commercial 1/7 scale figurine of the character in the picture was created, depicting a realistic style and a realistic environment. The figurine is placed on a computer desk with a round transparent acrylic base. There is no text on the base. The computer screen shows the Zbrush modeling process of the figurine. Next to the computer screen is a BANDAI-style toy box with the original painting printed on it.";
+import PROMPT from "@/configs/ai-prompt";
 const API_DOMAINS_CONFIG = [{
   domain: "https://aiimageeditor.me",
   weight: 10
@@ -148,7 +148,7 @@ class AIImageEditor {
         if (!remoteImageUrl) throw new Error("Gagal mendapatkan URL gambar setelah unggah.");
         this.logger.info(`Berhasil mengunggah gambar, URL: ${remoteImageUrl}`);
       }
-      const defaultPrompt = FIGURE_PROMPT;
+      const defaultPrompt = PROMPT.text;
       const payload = {
         picInfo: "",
         picInfo2: "",
@@ -297,7 +297,7 @@ export default async function handler(req, res) {
       case "status":
         if (!params.task_id) {
           return res.status(400).json({
-            error: "Parameter 'task_id' wajib diisi untuk action 'del_key'."
+            error: "Parameter 'task_id' wajib diisi untuk action 'status'."
           });
         }
         response = await api.status(params);
