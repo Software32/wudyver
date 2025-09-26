@@ -1,6 +1,8 @@
 import axios from "axios";
 import crypto from "crypto";
 import CryptoJS from "crypto-js";
+import SpoofHead from "@/lib/spoof-head";
+import PROMPT from "@/configs/ai-prompt";
 const API_BASE_URL = "https://apiv1.deepfakemaker.io/api";
 const APP_ID = "ai_df";
 const SECRET_STRING = "NHGNy5YFz7HeFb";
@@ -13,11 +15,31 @@ snOjvdDb4wiZI8x3UwIDAQAB
 class DeepFakeAPI {
   constructor() {
     this.userId = this._generateUserId();
+    this.headers = {
+      accept: "*/*",
+      "accept-language": "id-ID",
+      "access-control-allow-credentials": "true",
+      "content-type": "application/json",
+      origin: "https://deepfakemaker.io",
+      priority: "u=1, i",
+      referer: "https://deepfakemaker.io/",
+      "sec-ch-ua": '"Chromium";v="127", "Not)A;Brand";v="99", "Microsoft Edge Simulate";v="127", "Lemur";v="127"',
+      "sec-ch-ua-mobile": "?1",
+      "sec-ch-ua-platform": '"Android"',
+      "sec-fetch-dest": "empty",
+      "sec-fetch-mode": "cors",
+      "sec-fetch-site": "same-site",
+      "user-agent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Mobile Safari/537.36",
+      ...SpoofHead()
+    };
     this.config = {
       endpoints: {
         flux: {
           task: `${API_BASE_URL}/replicate/v1/free/flux/task`,
           list: `${API_BASE_URL}/replicate/v1/free/flux/list`
+        },
+        text_flux: {
+          task: `${API_BASE_URL}/replicate/v1/free/text/flux/task`
         },
         nano_banana: {
           task: `${API_BASE_URL}/replicate/v1/free/nano/banana/task`
@@ -26,8 +48,16 @@ class DeepFakeAPI {
       },
       platforms: {
         "ai-disney": "viking",
+        halloween: "halloween_filter",
+        lego: "lego",
+        silhouette: "silhouette_maker",
+        anime: "anime",
+        remove: "fliter_remove",
+        pfp: "anime_pfp_maker",
         img2img: "img2img",
-        "nano-banana": "nano_banana"
+        "nano-banana": "nano_banana",
+        polybuzz: "polybuzz",
+        txt2img: "text2img"
       },
       statusCodes: {
         PENDING: 0,
@@ -45,7 +75,7 @@ class DeepFakeAPI {
     console.log("Membuat parameter otentikasi...");
     try {
       const timestamp = Math.floor(Date.now() / 1e3);
-      const nonce = crypto.randomBytes(16).toString("hex");
+      const nonce = crypto.randomUUID();
       const aesKey = crypto.randomBytes(8).toString("hex");
       const secretKeyEncrypted = crypto.publicEncrypt({
         key: PUBLIC_KEY,
@@ -104,7 +134,8 @@ class DeepFakeAPI {
         hash: imageHash,
         user_id: this.userId
       }, {
-        params: this._getAuthParams()
+        params: this._getAuthParams(),
+        headers: this.headers
       });
       const uploadUrl = signResponse?.data?.data?.url;
       const objectName = signResponse?.data?.data?.object_name;
@@ -124,7 +155,7 @@ class DeepFakeAPI {
     }
   }
   async generate({
-    prompt,
+    prompt = PROMPT.text,
     imageUrl,
     mode = "img2img",
     ...rest
@@ -151,31 +182,63 @@ class DeepFakeAPI {
       console.log(`Mengirim permintaan untuk membuat tugas [${mode}]...`);
       let payload = {
         prompt: prompt,
-        output_format: outputFormat,
-        platform: platform,
         user_id: this.userId,
         ...rest
       };
-      if (mode === "ai-disney") {
-        payload.prompt = `Transform ${prompt} into a high-quality Disney-style animated scene. Preserve all original details, including character appearance, clothing, composition, and background. Add soft lighting, expressive eyes, glowing atmosphere, magical sparkles, and a painterly fairytale aesthetic. Other ideas about how to edit my image`;
-        payload.aspect_ratio = "1:1";
-        payload.image = uploadedImageUrl;
-      } else if (mode === "img2img") {
-        payload.aspect_ratio = "match_input_image";
+      let endpoint;
+      if (mode === "txt2img") {
+        endpoint = this.config.endpoints.text_flux.task;
+        payload.image_size = rest.image_size || 1024;
+        payload.aspect_ratio = rest.aspect_ratio || "3:2";
+        payload.platform = platform;
+        payload.speed_mode = rest.speed_mode || "Lightly Juiced 🍊 (more consistent)";
+      } else if (mode === "polybuzz") {
+        endpoint = this.config.endpoints.flux.task;
+        payload.output_format = outputFormat;
+        payload.aspect_ratio = rest.aspect_ratio || "3:2";
+        payload.platform = platform;
         payload.image = uploadedImageUrl;
       } else if (mode === "nano-banana") {
-        payload.images = uploadedImageUrls;
-      }
-      let endpoint;
-      if (mode === "nano-banana") {
         endpoint = this.config.endpoints.nano_banana.task;
+        payload.images = uploadedImageUrls;
       } else {
         endpoint = this.config.endpoints.flux.task;
+        payload.platform = platform;
+        payload.output_format = outputFormat;
+        payload.image = uploadedImageUrl;
+        if (mode === "ai-disney") {
+          payload.prompt = `Transform ${prompt} into a high-quality Disney-style animated scene. Preserve all original details, including character appearance, clothing, composition, and background. Add soft lighting, expressive eyes, glowing atmosphere, magical sparkles, and a painterly fairytale aesthetic.Other ideas about how to edit my image`;
+          payload.aspect_ratio = "3:2";
+        } else if (mode === "halloween") {
+          payload.prompt = `Keep the original features and details of the character, add Halloween makeup: {Makeup}. Change the clothes to: {clothes}. Change the background to: {background}. Other ideas about how to edit my image:${prompt}`;
+          payload.aspect_ratio = "3:2";
+        } else if (mode === "lego") {
+          payload.prompt = `Render the content in {the uploaded image or the scene description provided by the user} entirely in Lego style. Keep all original elements, subjects, and composition exactly the same. Represent any people or animals as smooth, fully-formed Lego figures.Only transform the visual appearance into realistic Lego bricks and textures, without adding or removing anything.Other ideas about how to edit my image:${prompt}`;
+          payload.aspect_ratio = "3:2";
+        } else if (mode === "silhouette") {
+          payload.prompt = `Transform the objects in the image into clean solid black silhouettes while perfectly preserving the original background. Additional styling: ${prompt}`;
+          payload.aspect_ratio = "3:2";
+        } else if (mode === "anime") {
+          payload.prompt = `Turn the image into anime style.\nOther ideas about how to edit my image: ${prompt}`;
+          payload.aspect_ratio = "3:2";
+        } else if (mode === "remove") {
+          payload.prompt = `Remove the filter from this photo while keeping all other aspects of the image intact. Retain the original skin tones, lighting, and details, ensuring the photo looks as natural as possible without altering the composition or background.Other ideas about how to edit my image: ${prompt}`;
+          payload.aspect_ratio = "3:2";
+        } else if (mode === "pfp") {
+          payload.prompt = `Convert the provided image into a high-quality ${prompt} style illustration. Preserve the core composition, subjects, and key details of the original image, while enhancing it with the distinct visual characteristics of the anime style, including its signature linework, vibrant color palette, and refined aesthetic. Ensure the result is polished, expressive, and true to the chosen anime style.`;
+          payload.aspect_ratio = "3:2";
+        } else if (mode === "img2img") {
+          payload.aspect_ratio = "match_input_image";
+        }
       }
       const response = await axios.post(endpoint, payload, {
-        params: this._getAuthParams()
+        params: this._getAuthParams(),
+        headers: this.headers
       });
       const task_id = response?.data?.data?.task_id || null;
+      if (!task_id) {
+        throw new Error("Gagal mendapatkan task_id dari respons API.");
+      }
       return await this.autoPolling({
         task_id: task_id,
         mode: mode
@@ -196,64 +259,40 @@ class DeepFakeAPI {
       return null;
     }
     try {
+      let endpoint;
       if (mode === "nano-banana") {
-        const endpoint = this.config.endpoints.nano_banana.task;
-        const params = {
-          ...this._getAuthParams(),
-          task_id: task_id,
-          user_id: this.userId,
-          ...rest
-        };
-        console.log("Mengambil status tugas [Banana] dari API...");
-        const response = await axios.get(endpoint, {
-          params: params
-        });
-        const result = response?.data || null;
-        if (result && result.code === 2e4) {
-          return {
-            success: true,
-            data: result.data,
-            status: result.data.status || 0,
-            progress: result.data.progress || 0,
-            generate_url: result.data.generate_url,
-            code: result.code,
-            msg: result.msg
-          };
-        }
-        return result;
+        endpoint = this.config.endpoints.nano_banana.task;
+      } else if (mode === "txt2img") {
+        endpoint = this.config.endpoints.text_flux.task;
       } else {
-        const endpoint = this.config.endpoints.flux.list;
-        const payload = {
-          page: 1,
-          page_count: 10,
-          platform: [this.config.platforms[mode] || mode],
-          user_id: this.userId,
-          ...rest
-        };
-        console.log("Mengambil daftar tugas dari API...");
-        const response = await axios.post(endpoint, payload, {
-          params: this._getAuthParams()
-        });
-        const result = response?.data || null;
-        if (result && result.data && Array.isArray(result.data)) {
-          const task = result.data.find(t => t.job_id === task_id);
-          if (task) {
-            return {
-              success: true,
-              data: task,
-              status: task.status,
-              progress: task.status === this.config.statusCodes.COMPLETED ? 100 : 0,
-              generate_url: task.generate_url,
-              totalCount: result.totalCount
-            };
-          }
-        }
+        endpoint = this.config.endpoints.flux.task;
+      }
+      const params = {
+        ...this._getAuthParams(),
+        task_id: task_id,
+        user_id: this.userId,
+        ...rest
+      };
+      console.log(`Mengambil status tugas [${mode}] dari API...`);
+      const response = await axios.get(endpoint, {
+        params: params,
+        headers: this.headers
+      });
+      const result = response?.data || null;
+      if (result && result.code === 2e4 && result.data) {
         return {
-          success: false,
-          error: "Task not found",
-          data: result
+          success: true,
+          data: result.data,
+          status: result.data.status,
+          progress: result.data.progress || 0,
+          generate_url: result.data.generate_url
         };
       }
+      return {
+        success: false,
+        error: "Task not found or failed",
+        data: result
+      };
     } catch (error) {
       console.error(`Gagal memeriksa status tugas [${mode}]:`, error?.response?.data || error.message);
       return {
@@ -277,20 +316,12 @@ class DeepFakeAPI {
           mode: mode
         });
         if (statusResult.success) {
-          let taskData, progress, status, generate_url;
-          if (mode === "nano-banana") {
-            taskData = statusResult.data;
-            progress = taskData.progress || 0;
-            status = taskData.status;
-            generate_url = taskData.generate_url;
-          } else {
-            taskData = statusResult.data;
-            status = taskData.status;
-            generate_url = taskData.generate_url;
-            progress = status === this.config.statusCodes.COMPLETED ? 100 : status === this.config.statusCodes.PROCESSING ? 50 : 0;
-          }
-          console.log(`Progress: ${progress}%, Status: ${status}`);
-          if (status === this.config.statusCodes.COMPLETED || generate_url) {
+          const taskData = statusResult.data;
+          const progress = taskData.progress || 0;
+          const status = taskData.status;
+          const generate_url = taskData.generate_url;
+          console.log(`Progress: ${progress}%, Status: ${this.getStatusText(status)}`);
+          if (status === this.config.statusCodes.COMPLETED || generate_url && progress === 100) {
             console.log("Tugas selesai!");
             return {
               success: true,
@@ -350,9 +381,9 @@ class DeepFakeAPI {
 }
 export default async function handler(req, res) {
   const params = req.method === "GET" ? req.query : req.body;
-  if (!params.imageUrl) {
+  if (!params.imageUrl && params.mode !== "txt2img") {
     return res.status(400).json({
-      error: "imageUrl are required"
+      error: "imageUrl is required"
     });
   }
   try {

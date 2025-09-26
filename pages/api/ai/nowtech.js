@@ -4,7 +4,9 @@ class NowtechAI {
   constructor() {
     this.secretKey = "dfaugf098ad0g98-idfaugf098ad0g98-iduoafiunoa-f09a8s098a09ea-a0s8g-asd8g0a9d--gasdga8d0g8a0dg80a9sd8g0a9d8gduoafiunoa-f09adfaugf098ad0g98-iduoafiunoa-f09a8s098a09ea-a0s8g-asd8g0a9d--gasdga8d0g8a0dg80a9sd8g0a9d8g8s098a09ea-a0s8g-asd8g0a9d--gasdga8d0g8a0dg80a9sd8g0a9d8g";
   }
-  async chat(prompt) {
+  async chat({
+    prompt
+  }) {
     if (!prompt) {
       throw new Error("prompt is required for chat.");
     }
@@ -59,7 +61,9 @@ class NowtechAI {
       });
     });
   }
-  async art(prompt) {
+  async art({
+    prompt
+  }) {
     if (!prompt) {
       throw new Error("Prompt is required for art generation.");
     }
@@ -92,7 +96,7 @@ export default async function handler(req, res) {
       error: "Action (chat or art) is required."
     });
   }
-  const nowtechAI = new NowtechAI();
+  const api = new NowtechAI();
   try {
     switch (action) {
       case "chat":
@@ -101,9 +105,9 @@ export default async function handler(req, res) {
             error: "prompt is required for 'chat' action."
           });
         }
-        const chatResponse = await nowtechAI.chat(params.prompt);
+        const chatResponse = await api.chat(params);
         return res.status(200).json({
-          response: chatResponse
+          result: chatResponse
         });
       case "art":
         if (!params.prompt) {
@@ -111,7 +115,7 @@ export default async function handler(req, res) {
             error: "Prompt is required for 'art' action."
           });
         }
-        const artResponse = await nowtechAI.art(params.prompt);
+        const artResponse = await api.art(params);
         return res.status(200).json(artResponse);
       default:
         return res.status(400).json({

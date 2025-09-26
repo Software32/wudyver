@@ -3,6 +3,7 @@ import crypto from "crypto";
 import CryptoJS from "crypto-js";
 import FormData from "form-data";
 import SpoofHead from "@/lib/spoof-head";
+import PROMPT from "@/configs/ai-prompt";
 class SignatureGenerator {
   constructor() {
     this.publicKey = `-----BEGIN PUBLIC KEY-----
@@ -42,13 +43,17 @@ r/myG9S+9cR5huTuFQIDAQAB
 class DeepFakeAPI {
   constructor(config = {}) {
     this.baseUrl = config.baseUrl || "https://api.deepfakemaker.io";
+    this.baseResultPath = "https://oss-global.pixnova.ai/";
     this.pollInterval = config.pollInterval || 3e3;
-    this.maxPollAttempts = config.maxPollAttempts || 100;
+    this.maxPollAttempts = config.maxPollAttempts || 60;
     this.appId = "aifaceswap";
     this.fingerprint = "817ddfb1-ea6c-4e07-b37d-3aa9281e4fb7";
     this.originFrom = "7cc7af6c758b6e74";
     this.themeVersion = "83EmcUoQTUv50LhNx0VrdcK8rcGexcP35FcZDcpgWsAXEyO4xqL5shCY6sFIWB2Q";
     this.signatureGenerator = new SignatureGenerator();
+    this.client = axios.create({
+      baseURL: this.baseUrl
+    });
     this.baseHeaders = {
       accept: "application/json, text/plain, */*",
       "accept-language": "id-ID",
@@ -95,18 +100,29 @@ class DeepFakeAPI {
       "theme-version": this.themeVersion
     };
   }
-  async handleImage(imageUrl) {
+  async handleImage(imageInput) {
+    console.log("... Memproses input gambar...");
     try {
-      if (!imageUrl || typeof imageUrl !== "string" || !imageUrl.startsWith("http")) {
-        throw new Error("Hanya URL gambar publik yang didukung.");
+      if (Buffer.isBuffer(imageInput)) {
+        console.log("... Input terdeteksi sebagai Buffer.");
+        return imageInput;
       }
-      const response = await axios.get(imageUrl, {
-        responseType: "arraybuffer"
-      });
-      return Buffer.from(response.data, "binary");
+      if (typeof imageInput === "string") {
+        if (imageInput.startsWith("http")) {
+          console.log("... Input terdeteksi sebagai URL, mengunduh...");
+          const response = await axios.get(imageInput, {
+            responseType: "arraybuffer"
+          });
+          return Buffer.from(response.data, "binary");
+        } else {
+          console.log("... Input terdeteksi sebagai string, mencoba konversi dari Base64.");
+          return Buffer.from(imageInput.split(";base64,").pop(), "base64");
+        }
+      }
+      throw new Error("Format gambar tidak didukung. Harap gunakan URL, Buffer, atau string Base64.");
     } catch (error) {
-      console.error("Gagal mengambil gambar dari URL:", error.message);
-      throw new Error("Gagal mengunduh gambar.");
+      console.error("❌ Gagal memproses gambar:", error.message);
+      throw new Error("Gagal memproses gambar.");
     }
   }
   async uploadImg(imageUrl, fnName) {
@@ -114,7 +130,7 @@ class DeepFakeAPI {
     const imageBuffer = await this.handleImage(imageUrl);
     const form = new FormData();
     form.append("file", imageBuffer, {
-      filename: `image-${Date.now()}.jpg`,
+      filename: `image.jpg`,
       contentType: "image/jpeg"
     });
     form.append("fn_name", fnName);
@@ -124,9 +140,10 @@ class DeepFakeAPI {
     try {
       const {
         data: result
-      } = await axios.post(`${this.baseUrl}/aitools/upload-img`, form, {
+      } = await this.client.post(`/aitools/upload-img`, form, {
         headers: headers
       });
+      console.log(result);
       if (result?.code !== 200) throw new Error(result?.message || "Gagal mengunggah");
       console.log("✅ Gambar diunggah:", result.data?.path);
       return result.data?.path;
@@ -149,10 +166,11 @@ class DeepFakeAPI {
       origin_from: this.originFrom
     };
     const headers = this.generateApiHeaders();
+    console.log(headers);
     try {
       const {
         data: result
-      } = await axios.post(`${this.baseUrl}/aitools/of/create`, payload, {
+      } = await this.client.post(`/aitools/of/create`, payload, {
         headers: headers
       });
       if (result?.code !== 200) throw new Error(result?.message || "Pembuatan tugas gagal");
@@ -179,7 +197,7 @@ class DeepFakeAPI {
     try {
       const {
         data: result
-      } = await axios.post(`${this.baseUrl}/aitools/of/check-status`, payload, {
+      } = await this.client.post(`/aitools/of/check-status`, payload, {
         headers: headers
       });
       if (result?.code !== 200) throw new Error(result?.message || "Pemeriksaan status gagal");
@@ -189,21 +207,59 @@ class DeepFakeAPI {
       throw error;
     }
   }
+  async pollStatus(taskId, fnName) {
+    return new Promise((resolve, reject) => {
+      let attempts = 0;
+      const intervalId = setInterval(async () => {
+        attempts++;
+        console.log(`🔎 Memeriksa status... (Percobaan ${attempts}/${this.maxPollAttempts})`);
+        if (attempts > this.maxPollAttempts) {
+          clearInterval(intervalId);
+          return reject(new Error("Batas waktu polling status tercapai."));
+        }
+        try {
+          const statusResult = await this.status({
+            task_id: taskId,
+            fnName: fnName
+          });
+          if (statusResult?.status === 2 && statusResult?.result_image) {
+            console.log("✅ Tugas selesai!");
+            clearInterval(intervalId);
+            resolve(statusResult);
+          } else if (statusResult?.status === 3) {
+            clearInterval(intervalId);
+            reject(new Error("Pemrosesan tugas gagal di server."));
+          }
+        } catch (error) {
+          clearInterval(intervalId);
+          reject(error);
+        }
+      }, this.pollInterval);
+    });
+  }
   async generate({
-    prompt,
+    prompt = PROMPT.text,
     imageUrl,
     clothType = "full_outfits"
   }) {
+    console.log("🎨 Memulai proses pembuatan lengkap...");
+    const fnName = "cloth-change";
     try {
-      console.log("🎨 Memulai proses pembuatan");
-      const imagePath = await this.uploadImg(imageUrl, "cloth-change");
-      const taskData = await this.createTask("cloth-change", {
+      const imagePath = await this.uploadImg(imageUrl, fnName);
+      const taskData = await this.createTask(fnName, {
         source_image: imagePath,
         prompt: prompt,
         cloth_type: clothType
       });
-      console.log("🎊 Pembuatan selesai dengan sukses");
-      return taskData;
+      if (!taskData?.task_id) throw new Error("Gagal mendapatkan ID tugas.");
+      const finalStatus = await this.pollStatus(taskData.task_id, fnName);
+      if (!finalStatus?.result_image) throw new Error("Hasil tugas tidak berisi path gambar.");
+      const finalImageUrl = this.baseResultPath + finalStatus.result_image;
+      console.log("🎊 Proses selesai dengan sukses!");
+      return {
+        success: true,
+        result_url: finalImageUrl
+      };
     } catch (error) {
       console.log("💥 Pembuatan gagal:", error.message);
       return {
@@ -214,39 +270,16 @@ class DeepFakeAPI {
   }
 }
 export default async function handler(req, res) {
-  const {
-    action,
-    ...params
-  } = req.method === "GET" ? req.query : req.body;
-  if (!action) {
+  const params = req.method === "GET" ? req.query : req.body;
+  if (!params.imageUrl) {
     return res.status(400).json({
-      error: "Action (create or status) is required."
+      error: "imageUrl is required"
     });
   }
-  const api = new DeepFakeAPI();
   try {
-    switch (action) {
-      case "create":
-        if (!params.prompt || !params.imageUrl) {
-          return res.status(400).json({
-            error: "Prompt and imageUrl are required for 'create' action."
-          });
-        }
-        const createResponse = await api.generate(params);
-        return res.status(200).json(createResponse);
-      case "status":
-        if (!params.task_id) {
-          return res.status(400).json({
-            error: "task_id is required for 'status' action."
-          });
-        }
-        const statusResponse = await api.status(params);
-        return res.status(200).json(statusResponse);
-      default:
-        return res.status(400).json({
-          error: "Invalid action. Supported actions are 'create' and 'status'."
-        });
-    }
+    const api = new DeepFakeAPI();
+    const response = await api.generate(params);
+    return res.status(200).json(response);
   } catch (error) {
     res.status(500).json({
       error: error.message || "Internal Server Error"
