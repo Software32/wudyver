@@ -235,6 +235,7 @@ class DeepFakeAPI {
         params: this._getAuthParams(),
         headers: this.headers
       });
+      console.log("Respons pembuatan tugas:", response?.data);
       const task_id = response?.data?.data?.task_id || null;
       if (!task_id) {
         throw new Error("Gagal mendapatkan task_id dari respons API.");
@@ -279,18 +280,20 @@ class DeepFakeAPI {
         headers: this.headers
       });
       const result = response?.data || null;
-      if (result && result.code === 2e4 && result.data) {
+      console.log("Respons status:", result);
+      if (result && (result.msg === "success" || result.msg === "processing")) {
         return {
           success: true,
+          msg: result.msg,
           data: result.data,
-          status: result.data.status,
-          progress: result.data.progress || 0,
-          generate_url: result.data.generate_url
+          status: result.data?.status,
+          progress: result.data?.progress || 0,
+          generate_url: result.data?.generate_url
         };
       }
       return {
         success: false,
-        error: "Task not found or failed",
+        error: result?.msg || "Task not found or failed",
         data: result
       };
     } catch (error) {
@@ -316,43 +319,35 @@ class DeepFakeAPI {
           mode: mode
         });
         if (statusResult.success) {
-          const taskData = statusResult.data;
-          const progress = taskData.progress || 0;
-          const status = taskData.status;
-          const generate_url = taskData.generate_url;
-          console.log(`Progress: ${progress}%, Status: ${this.getStatusText(status)}`);
-          if (status === this.config.statusCodes.COMPLETED || generate_url && progress === 100) {
-            console.log("Tugas selesai!");
+          if (statusResult.generate_url) {
+            console.log("Tugas selesai! URL telah dibuat.");
             return {
               success: true,
               completed: true,
-              data: taskData,
-              generate_url: generate_url,
-              progress: 100,
-              status: status,
+              data: statusResult.data,
+              generate_url: statusResult.generate_url,
               attempt: attempt
             };
           }
-          if (status === this.config.statusCodes.FAILED) {
+          if (statusResult.status === this.config.statusCodes.FAILED) {
             console.error("Tugas gagal!");
             return {
               success: false,
               completed: true,
               error: "Task failed",
-              data: taskData,
-              progress: progress,
-              status: status,
+              data: statusResult.data,
+              status: statusResult.status,
               attempt: attempt
             };
           }
-          if (attempt < maxAttempts) {
-            await new Promise(resolve => setTimeout(resolve, interval));
-          }
+          const progress = statusResult.progress || 0;
+          const statusText = this.getStatusText(statusResult.status);
+          console.log(`Progress: ${progress}%, Status: ${statusText}, Pesan API: ${statusResult.msg}`);
         } else {
-          console.error(`Status check failed: ${statusResult.error}`);
-          if (attempt < maxAttempts) {
-            await new Promise(resolve => setTimeout(resolve, interval));
-          }
+          console.error(`Pemeriksaan status gagal: ${statusResult.error}`);
+        }
+        if (attempt < maxAttempts) {
+          await new Promise(resolve => setTimeout(resolve, interval));
         }
       } catch (error) {
         console.error(`Error pada polling attempt ${attempt}:`, error);
@@ -376,7 +371,7 @@ class DeepFakeAPI {
       2: "Completed",
       3: "Failed"
     };
-    return statusMap[statusCode] || "Unknown";
+    return statusMap[statusCode] ?? "Unknown";
   }
 }
 export default async function handler(req, res) {
@@ -387,8 +382,8 @@ export default async function handler(req, res) {
     });
   }
   try {
-    const api = new DeepFakeAPI();
-    const response = await api.generate(params);
+    const client = new DeepFakeAPI();
+    const response = await client.generate(params);
     return res.status(200).json(response);
   } catch (error) {
     res.status(500).json({

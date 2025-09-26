@@ -1,74 +1,69 @@
 import axios from "axios";
-import crypto from "crypto";
+import {
+  CookieJar
+} from "tough-cookie";
+import {
+  wrapper
+} from "axios-cookiejar-support";
 import SpoofHead from "@/lib/spoof-head";
-class Pictify {
+class PictifyConverter {
   constructor() {
-    this.baseUrl = "https://api.pictify.io";
-    this.url = `${this.baseUrl}/image/public`;
-    this.client = axios.create({
-      withCredentials: true
-    });
-    this.defaultHeaders = {
+    this.cookieJar = new CookieJar();
+    this.client = wrapper(axios.create({
+      jar: this.cookieJar
+    }));
+    this.apiUrl = "https://api.pictify.io/image/public";
+    this.headers = {
       accept: "*/*",
-      "accept-language": "id-ID,id;q=0.9",
+      "accept-language": "id-ID",
       "content-type": "application/json",
+      origin: "https://pictify.io",
       priority: "u=1, i",
-      "sec-ch-ua": '"Chromium";v="131", "Not_A Brand";v="24", "Microsoft Edge Simulate";v="131", "Lemur";v="131"',
+      referer: "https://pictify.io/",
+      "sec-ch-ua": '"Chromium";v="127", "Not)A;Brand";v="99", "Microsoft Edge Simulate";v="127", "Lemur";v="127"',
       "sec-ch-ua-mobile": "?1",
       "sec-ch-ua-platform": '"Android"',
       "sec-fetch-dest": "empty",
       "sec-fetch-mode": "cors",
-      "sec-fetch-site": "same-origin",
-      "user-agent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
-    };
-    this.client.interceptors.response.use(this.updateCookie);
-  }
-  updateCookie(response) {
-    const setCookieHeader = response.headers["set-cookie"];
-    if (setCookieHeader) {
-      const cookieString = setCookieHeader.join("; ");
-      console.log("Set-Cookie:", cookieString);
-    }
-    return response;
-  }
-  randomID(length = 16) {
-    return crypto.randomBytes(length).toString("hex");
-  }
-  buildHeaders(extra = {}) {
-    return {
-      origin: this.baseUrl,
-      referer: `${this.baseUrl}/`,
-      "user-agent": this.defaultHeaders["user-agent"],
-      "x-request-id": this.randomID(8),
-      ...SpoofHead(),
-      ...this.defaultHeaders,
-      ...extra
+      "sec-fetch-site": "same-site",
+      "user-agent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Mobile Safari/537.36",
+      ...SpoofHead()
     };
   }
-  async convertHTMLToImage({
+  async convertHtmlToImageUrl({
     html,
-    width = 1280,
-    height = 1280,
-    ext = "png",
-    ...params
-  } = {}) {
+    width = 380,
+    height = 400,
+    fileExtension = "png"
+  }) {
+    const payload = {
+      html: html,
+      width: width,
+      height: height,
+      fileExtension: fileExtension
+    };
     try {
-      const headers = this.buildHeaders();
-      const data = {
-        html: html,
-        width: width,
-        height: height,
-        ...params
-      };
-      if (ext !== "gif") data.fileExtension = ext;
-      const response = await this.client.post(this.url, data, {
-        headers: headers
+      console.log("Mengirim permintaan ke Pictify API...");
+      const response = await this.client.post(this.apiUrl, payload, {
+        headers: this.headers
       });
-      return ext === "gif" ? response.data?.gif?.url : response.data?.image?.url;
+      const imageUrl = response.data?.image?.url;
+      if (response.status === 200 && imageUrl) {
+        console.log("URL gambar berhasil didapatkan!");
+        return imageUrl;
+      } else {
+        throw new Error(`Gagal mendapatkan URL gambar. Respons tidak valid atau URL tidak ditemukan. Status: ${response.status}`);
+      }
     } catch (error) {
-      return {
-        error: "Gagal mengonversi HTML ke gambar"
-      };
+      if (error.response) {
+        console.error(`Error dari server Pictify (Status: ${error.response.status}):`, error.response.data);
+        throw new Error(`Error dari server Pictify: ${JSON.stringify(error.response.data)}`);
+      } else if (error.request) {
+        console.error("Terjadi kesalahan: Tidak ada respons dari server Pictify.");
+        throw new Error("Tidak ada respons dari server Pictify.");
+      } else {
+        throw error;
+      }
     }
   }
 }
@@ -80,8 +75,8 @@ export default async function handler(req, res) {
         error: "Missing 'html' parameter"
       });
     }
-    const converter = new Pictify();
-    const result = await converter.convertHTMLToImage(params);
+    const pictify = new PictifyConverter();
+    const result = await pictify.convertHtmlToImageUrl(params);
     return res.status(200).json({
       url: result
     });

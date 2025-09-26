@@ -50,7 +50,7 @@ const createSpinner = text => ora({
   text: text,
   spinner: "moon"
 });
-const Provider = ["Catbox", "Doodstream", "Fexnet", "Getshared", "Bash", "FileDitch", "Filebin", "Fileio", "Filezone", "FreeImage", "Gofile", "Gozic", "Hostfile", "Imgbb", "Kitc", "Kraken", "MediaUpload", "Eax", "Nullbyte", "Vello", "Lusia", "Pomf2", "Sazumi", "Sohu", "Gizai", "Sojib", "Instantiated", "Exonity", "Zcy", "BltokProject", "Maricon", "Nauval", "Supa", "Knowee", "Puticu", "Stylar", "Telegraph", "Tmpfiles", "Cloudmini", "Babup", "Transfersh", "Ucarecdn", "Uguu", "UploadEE", "Uploadify", "Videy", "ZippyShare", "Quax", "Aceimg"];
+const Provider = ["Catbox", "Doodstream", "Fexnet", "DOffice", "Bash", "FileDitch", "Filebin", "Fileio", "Filezone", "FreeImage", "Gofile", "Gozic", "Hostfile", "Imgbb", "Kitc", "Kraken", "MediaUpload", "Eax", "Nullbyte", "Vello", "Lusia", "Pomf2", "Sazumi", "Sohu", "Gizai", "Sojib", "Instantiated", "Exonity", "Zcy", "BltokProject", "Maricon", "Nauval", "Supa", "Knowee", "Puticu", "Stylar", "Telegraph", "Tmpfiles", "Cloudmini", "Babup", "Transfersh", "Ucarecdn", "Uguu", "UploadEE", "Uploadify", "Videy", "ZippyShare", "Quax", "Aceimg"];
 class Uploader {
   constructor() {
     this.Provider = Provider;
@@ -473,26 +473,23 @@ class Uploader {
       handleError(error, spinner);
     }
   }
-  async Getshared(content) {
-    const spinner = createSpinner("Uploading to Getshared").start();
+  async DOffice(content) {
+    const spinner = createSpinner("Uploading to DOffice").start();
     try {
       const {
         formData,
         ext
-      } = await createFormData(content, "files");
-      formData.append("upload_id", generateSlug);
-      formData.append("file_uid", generateSlug);
-      formData.append("original_path", "");
-      const response = await fetch("https://getshared.com/upload", {
+      } = await createFormData(content, "file");
+      const response = await fetch("https://www.digitalofficepro.com/file-converter/assembly/upload-file.php", {
         method: "POST",
         body: formData,
         headers: {
           "User-Agent": fakeUa()
         }
       });
-      spinner.succeed(chalk.green("Uploaded to Getshared"));
-      const files = await response.json();
-      return files.files[0]?.url;
+      spinner.succeed(chalk.green("Uploaded to DOffice"));
+      const files = await response.text();
+      return `https://s3.us-west-2.amazonaws.com/temp.digitalofficepro.com/${files}`;
     } catch (error) {
       handleError(error, spinner);
     }

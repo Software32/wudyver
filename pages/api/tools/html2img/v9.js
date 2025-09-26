@@ -4,6 +4,7 @@ import {
   Blob
 } from "formdata-node";
 import apiConfig from "@/configs/apiConfig";
+import SpoofHead from "@/lib/spoof-head";
 class SelectPdfConverter {
   constructor() {
     this.baseURL = "https://selectpdf.com";
@@ -21,7 +22,8 @@ class SelectPdfConverter {
           "Cache-Control": "no-cache",
           Pragma: "no-cache",
           "Upgrade-Insecure-Requests": "1",
-          "User-Agent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
+          "User-Agent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36",
+          ...SpoofHead()
         }
       });
       if (response.status === 200) {
@@ -94,6 +96,17 @@ class SelectPdfConverter {
       }
     } catch (error) {
       console.error("Terjadi kesalahan selama konversi:", error);
+      if (error.response && error.response.status !== 200) {
+        console.log("Mencoba mengambil parameter baru dan mengulang konversi...");
+        await this.getInitialParams();
+        return this.convertHTMLToImage({
+          html: html,
+          baseUrl: baseUrl,
+          imageFormat: imageFormat,
+          width: width,
+          height: height
+        });
+      }
       throw error;
     }
   }
@@ -124,7 +137,7 @@ class SelectPdfConverter {
       }
     }
   }
-  async convertHTMLToImage({
+  async convertAndUpload({
     html,
     baseUrl = "",
     imageFormat = "png",
@@ -156,7 +169,7 @@ export default async function handler(req, res) {
       });
     }
     const converter = new SelectPdfConverter();
-    const result = await converter.convertHTMLToImage(params);
+    const result = await converter.convertAndUpload(params);
     return res.status(200).json({
       url: result
     });

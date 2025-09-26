@@ -1461,7 +1461,6 @@ export default function handler(req, res) {
     { path: "/api/tools/html2img/v7", name: "V7", params: [{ "name": "prompt", "in": "query", "required": false }], },
     { path: "/api/tools/html2img/v8", name: "V8", params: [{ "name": "prompt", "in": "query", "required": false }], },
     { path: "/api/tools/html2img/v9", name: "V9", params: [{ "name": "prompt", "in": "query", "required": false }], },
-    { path: "/api/tools/html2img/v18", name: "V18", params: [{ "name": "prompt", "in": "query", "required": false }], },
     { path: "/api/tools/ig/auto-follow", name: "Auto-follow", params: [{ "name": "prompt", "in": "query", "required": false }], },
     { path: "/api/tools/ig/info", name: "Info", params: [{ "name": "prompt", "in": "query", "required": false }], },
     { path: "/api/tools/img2pdf/v1", name: "V1", params: [{ "name": "prompt", "in": "query", "required": false }], },

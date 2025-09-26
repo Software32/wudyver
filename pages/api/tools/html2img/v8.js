@@ -1,80 +1,53 @@
 import axios from "axios";
-import {
-  FormData,
-  Blob
-} from "formdata-node";
-import {
-  v4 as uuidv4
-} from "uuid";
-class WordizeConverter {
+import FormData from "form-data";
+class HtmlToImageConverter {
   constructor() {
-    this.baseURL = "https://api.wordize.app/conversion/api";
-    this.sessionId = uuidv4();
+    this.baseUrl = "https://api.products.fileformat.app/word-processing/conversion/api/convert?outputType=PNG";
   }
-  async convertFile({
-    html,
-    output,
-    lang,
-    ocr,
-    pass
+  async convertHtmlToImage({
+    html: htmlContent
   }) {
     try {
-      const fileName = `${uuidv4()}.html`;
-      const buffer = Buffer.from(html, "utf-8");
       const formData = new FormData();
-      formData.append("1", new Blob([buffer], {
-        type: "text/html"
-      }), fileName);
-      const conversionOptions = {
-        UseOcr: ocr || "false",
-        Locale: lang || "en",
-        Password: pass || null,
-        OutputType: output || "PNG",
-        sessionId: this.sessionId,
-        fileIds: [null],
-        rotationAngles: [0]
-      };
-      formData.append("model", JSON.stringify(conversionOptions));
-      formData.append("ConversionOptions", JSON.stringify(conversionOptions));
+      formData.append("1", Buffer.from(htmlContent), {
+        filename: "html.html",
+        contentType: "text/html"
+      });
       const headers = {
         accept: "*/*",
-        "content-type": `multipart/form-data; boundary=${formData.boundary}`,
-        origin: "https://www.wordize.app",
-        referer: "https://www.wordize.app/",
-        "user-agent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
+        "accept-language": "id-ID,id;q=0.9",
+        origin: "https://products.fileformat.app",
+        priority: "u=1, i",
+        referer: "https://products.fileformat.app/",
+        "sec-ch-ua": '"Lemur";v="135", "", "", "Microsoft Edge Simulate";v="135"',
+        "sec-ch-ua-mobile": "?1",
+        "sec-ch-ua-platform": '"Android"',
+        "sec-fetch-dest": "empty",
+        "sec-fetch-mode": "cors",
+        "sec-fetch-site": "same-site",
+        "user-agent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Mobile Safari/537.36",
+        ...formData.getHeaders()
       };
-      const {
-        data
-      } = await axios.post(`${this.baseURL}/convert?outputType=${output}`, formData, {
-        headers: headers
+      const response = await axios.post(this.baseUrl, formData, {
+        headers: headers,
+        maxContentLength: Infinity,
+        maxBodyLength: Infinity
       });
-      if (!data.id) throw new Error("Gagal mengonversi file.");
-      return data.id;
+      if (response.data && response.data.id) {
+        const fileId = encodeURIComponent(response.data.id);
+        return {
+          url: `https://products.fileformat.app/image/conversion/Download?id=${fileId}`
+        };
+      } else {
+        throw new Error("Format respons API tidak valid");
+      }
     } catch (error) {
-      console.error("Error saat konversi:", error.message);
-      return null;
-    }
-  }
-  async convertHTMLToImage({
-    html,
-    output = "PNG",
-    lang = "en",
-    ocr = "false",
-    pass = null
-  }) {
-    try {
-      const pngId = await this.convertFile({
-        html: html,
-        output: output,
-        lang: lang,
-        ocr: ocr,
-        pass: pass
-      });
-      if (!pngId) return null;
-      return `${this.baseURL}/download?id=${pngId}`;
-    } catch (error) {
-      console.error("Gagal menjalankan proses:", error.message);
-      return null;
+      console.error("Error dalam konversi HTML ke gambar:", error.message);
+      if (error.response) {
+        console.error("Detail error:", error.response.data);
+        console.error("Status error:", error.response.status);
+      }
+      throw error;
     }
   }
 }
@@ -86,11 +59,9 @@ export default async function handler(req, res) {
         error: "Missing 'html' parameter"
       });
     }
-    const converter = new WordizeConverter();
-    const result = await converter.convertHTMLToImage(params);
-    return res.status(200).json({
-      url: result
-    });
+    const converter = new HtmlToImageConverter();
+    const result = await converter.convertHtmlToImage(params);
+    return res.status(200).json(result);
   } catch (error) {
     return res.status(500).json({
       error: error.message
